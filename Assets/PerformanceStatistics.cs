@@ -6,6 +6,7 @@ using System.Text;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.AdaptivePerformance;
+using Debug = UnityEngine.Debug;
 
 public class PerformanceStatistics : MonoBehaviour
 {
