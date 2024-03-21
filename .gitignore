@@ -73,3 +73,4 @@ crashlytics-build.properties
 Assets/text.txt
 text.txt
 .DS_Store
+.idea/
