@@ -74,7 +74,9 @@ public class PrintAvailableProfilers : MonoBehaviour
         }
 
         var path = Path.Combine(Application.dataPath, "text.txt");
+#if UNITY_EDITOR
         File.WriteAllText(path, sb.ToString());
+#endif
         Debug.Log($"Txt path: {path}");
 
         sb.Clear();
@@ -96,7 +98,9 @@ public class PrintAvailableProfilers : MonoBehaviour
         sb.AppendLine("}");
         
         path = Path.Combine(Application.dataPath, "markers.json");
+#if UNITY_EDITOR
         File.WriteAllText(path, sb.ToString());
+#endif
         Debug.Log($"JSON path: {path}");
     }
 

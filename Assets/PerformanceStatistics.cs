@@ -6,7 +6,6 @@ using System.Text;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.AdaptivePerformance;
-using Debug = UnityEngine.Debug;
 
 public class PerformanceStatistics : MonoBehaviour
 {
@@ -86,6 +85,7 @@ public class PerformanceStatistics : MonoBehaviour
     private ProfilerRecorder _materialsMemoryRecorder;
     private ProfilerRecorder _meshesMemoryRecorder;
     private Dictionary<string, ProfilerRecorder> _renderingMarkers;
+    private AndroidJavaObject _hardwareService;
 
     void LateUpdate()
     {
@@ -111,7 +111,7 @@ public class PerformanceStatistics : MonoBehaviour
             _output.AppendLine($"Temperature Trend: {thermalMetrics.TemperatureTrend}");
             _output.AppendLine($"Temperature Warning Level: {thermalMetrics.WarningLevel}");
         }
-        _output.AppendLine("=== FrameTimingManager ===");
+        _output.AppendLine("\n=== FrameTimingManager ===");
         
         FrameTimingManager.CaptureFrameTimings();
         var framesRead = FrameTimingManager.GetLatestTimings(1, m_FrameTiming);
@@ -127,12 +127,12 @@ public class PerformanceStatistics : MonoBehaviour
             _output.AppendLine("No frames read");
         }
         
-        _output.AppendLine("=== Profiler Recorder ===");
+        _output.AppendLine("\n=== Profiler Recorder ===");
         
         _output.AppendLine($"Main Thread Time: {GetRecorderFrameAverage(_mainThreadTimeRecorder) * (1e-6f):F1} ms");
         _output.AppendLine($"GPU Time: {GetRecorderFrameAverage(_gpuTime) * (1e-6f):F1} ms");
         
-        _output.AppendLine("--- Memory ---");
+        _output.AppendLine("\n--- Memory ---");
         _output.AppendLine($"GC Memory: {_gcMemoryRecorder.LastValue} Bytes / {_gcMemoryRecorder.LastValue / (1024 * 1024)} MB");
         _output.AppendLine($"System Memory: {_systemMemoryRecorder.LastValue} Bytes / {_systemMemoryRecorder.LastValue / (1024 * 1024)} MB");
         _output.AppendLine($"Render Textures memory: {_renderingMarkers["RenderTextures"].LastValue} Bytes / {_renderingMarkers["RenderTextures"].LastValue / (1024 * 1024)} MB");
@@ -144,19 +144,19 @@ public class PerformanceStatistics : MonoBehaviour
         _output.AppendLine($"Meshes Memory: {_meshesMemoryRecorder.LastValue} Bytes / {_meshesMemoryRecorder.LastValue / (1024 * 1024)} MB");
         _output.AppendLine($"Materials Memory: {_materialsMemoryRecorder.LastValue} Bytes / {_materialsMemoryRecorder.LastValue / (1024 * 1024)} MB");
         
-        _output.AppendLine("--- Drawing ---");
+        _output.AppendLine("\n--- Drawing ---");
         _output.AppendLine($"Draw Calls: {_renderingMarkers["DrawCall"].LastValue}");
         _output.AppendLine($"Set Pass Calls: {_renderingMarkers["SetPass"].LastValue}");
         _output.AppendLine($"Batches: {_renderingMarkers["Batches"].LastValue}");
         
-        _output.AppendLine("=== SystemInfo ===");
+        _output.AppendLine("\n=== SystemInfo ===");
         
         _output.AppendLine($"Total system memory: {SystemInfo.systemMemorySize} Bytes / {SystemInfo.systemMemorySize / (1024 * 1024)} MB");
         _output.AppendLine($"Total GPU memory: {SystemInfo.graphicsMemorySize} Bytes / {SystemInfo.graphicsMemorySize / (1024 * 1024)} MB");
         _output.AppendLine($"Battery level: {SystemInfo.batteryLevel} {SystemInfo.batteryStatus}");
         _output.AppendLine($"supportsGpuRecorder: {SystemInfo.supportsGpuRecorder}");
         
-        _output.AppendLine("=== Process ===");
+        _output.AppendLine("\n=== Process ===");
         
         var proc = Process.GetCurrentProcess();
         var memoryInBytes = proc.PrivateMemorySize64;
@@ -166,8 +166,8 @@ public class PerformanceStatistics : MonoBehaviour
         _output.AppendLine($"GC total memory: {totalMemory} Bytes / {totalMemory / (1024 * 1024)} MB");
         
         #if !UNITY_EDITOR && UNITY_ANDROID
-        _output.AppendLine("=== MemoryInfo ===");
-        using (var activity = new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity"))
+        _output.AppendLine("\n=== MemoryInfo ===");
+        /*using (var activity = new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity"))
         {
             if(activity != null)
             {
@@ -191,7 +191,7 @@ public class PerformanceStatistics : MonoBehaviour
             {
                 _output.AppendLine("activity null");
             }
-        }
+        }*/
         
         if(_memoryService != null)
         {
@@ -203,6 +203,31 @@ public class PerformanceStatistics : MonoBehaviour
             _output.AppendLine("Total Memory: " + totalMemory);
             _output.AppendLine("Available Memory: " + availMemory);
             _output.AppendLine("Low Memory Warning: " + lowMemory);
+        }
+        else
+        {
+            _output.AppendLine("\nMemory Service is not available");
+        }
+
+        int cpu = 0;
+        int gpu = 1;
+        int skin = 3;
+        int t_Cur = 0;
+        int t_Throtling = 1;
+        int t_Shutdown = 2;
+        if (_hardwareService != null)
+        {
+            var result = _hardwareService.Call<float[]>("getDeviceTemperatures", new[]{0, 0});
+            _output.AppendLine("*Current CPU temperature*");
+            foreach (var item in result)
+            {
+                _output.AppendLine(item.ToString(CultureInfo.InvariantCulture));
+            }
+
+        }
+        else
+        {
+            _output.AppendLine("Hardware Service is not available");
         }
         
         // sb.AppendLine("Command line: " + CallMethod());
@@ -227,19 +252,21 @@ public class PerformanceStatistics : MonoBehaviour
         if (_context == null)
         {
             Debug.Log("Context null");
-            return;
         }
+        // this doesn't work
+        // looks like services are not available via getSystemService from C# code
         _memoryService = _context.Call<AndroidJavaObject>("getSystemService", "memory");
         if (_memoryService == null)
         {
             Debug.Log("_memoryService null");
-            return;
         }
         _memoryInfo = new AndroidJavaObject("android.app.ActivityManager$MemoryInfo");
         if (_memoryInfo == null)
         {
             Debug.Log("_memoryInfo null");
         }
+
+        _hardwareService = _context.Call<AndroidJavaObject>("getSystemService", "hardware_properties");
 #endif
     }
 
