@@ -14,8 +14,6 @@ public class PerformanceStatistics : MonoBehaviour
     private ProfilerRecorder _mainThreadTimeRecorder;
     private GUIStyle _style;
     private AndroidJavaObject _activity;
-    private AndroidJavaObject _context;
-    private AndroidJavaObject _memoryService;
     private AndroidJavaObject _memoryInfo;
     private ProfilerRecorder _gpuTime;
     private IAdaptivePerformance _adaptivePerformance;
@@ -85,7 +83,6 @@ public class PerformanceStatistics : MonoBehaviour
     private ProfilerRecorder _materialsMemoryRecorder;
     private ProfilerRecorder _meshesMemoryRecorder;
     private Dictionary<string, ProfilerRecorder> _renderingMarkers;
-    private AndroidJavaObject _hardwareService;
 
     void LateUpdate()
     {
@@ -165,14 +162,15 @@ public class PerformanceStatistics : MonoBehaviour
         var totalMemory = GC.GetTotalMemory(false);
         _output.AppendLine($"GC total memory: {totalMemory} Bytes / {totalMemory / (1024 * 1024)} MB");
         
-        #if !UNITY_EDITOR && UNITY_ANDROID
+#if !UNITY_EDITOR && UNITY_ANDROID
         _output.AppendLine("\n=== MemoryInfo ===");
-        /*using (var activity = new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity"))
+        using (var activity =
+               new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity"))
         {
-            if(activity != null)
+            if (activity != null)
             {
                 using var activityManager = activity.Call<AndroidJavaObject>("getSystemService", "activity");
-                if(activityManager != null)
+                if (activityManager != null)
                 {
                     using var memoryInfo = new AndroidJavaObject("android.app.ActivityManager$MemoryInfo");
                     activityManager.Call("getMemoryInfo", memoryInfo);
@@ -184,90 +182,54 @@ public class PerformanceStatistics : MonoBehaviour
                 }
                 else
                 {
-                    _output.AppendLine("activityManager null");
+                    _output.AppendLine("\nActivityManager null");
+                }
+
+                using var memoryService = activity.Call<AndroidJavaObject>("getSystemService", "memory");
+                if (memoryService != null)
+                {
+                    memoryService.Call("getMemoryInfo", _memoryInfo);
+                    totalMemory = _memoryInfo.Get<long>("totalMem");
+                    var availMemory = _memoryInfo.Get<long>("availMem");
+                    var lowMemory = _memoryInfo.Get<bool>("lowMemory");
+
+                    _output.AppendLine("Total Memory: " + totalMemory);
+                    _output.AppendLine("Available Memory: " + availMemory);
+                    _output.AppendLine("Low Memory Warning: " + lowMemory);
+                }
+                else
+                {
+                    _output.AppendLine("\nMemory Service is not available");
                 }
             }
             else
             {
                 _output.AppendLine("activity null");
             }
-        }*/
-        
-        if(_memoryService != null)
-        {
-            _memoryService.Call("getMemoryInfo", _memoryInfo);
-            totalMemory = _memoryInfo.Get<long>("totalMem");
-            var availMemory = _memoryInfo.Get<long>("availMem");
-            var lowMemory = _memoryInfo.Get<bool>("lowMemory");
-
-            _output.AppendLine("Total Memory: " + totalMemory);
-            _output.AppendLine("Available Memory: " + availMemory);
-            _output.AppendLine("Low Memory Warning: " + lowMemory);
-        }
-        else
-        {
-            _output.AppendLine("\nMemory Service is not available");
         }
 
-        int cpu = 0;
-        int gpu = 1;
-        int skin = 3;
-        int t_Cur = 0;
-        int t_Throtling = 1;
-        int t_Shutdown = 2;
-        if (_hardwareService != null)
+        using(var unityPlayerClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+        using(var context = unityPlayerClass.GetStatic<AndroidJavaObject>("currentActivity"))
+        using(var locationManager = context.Call<AndroidJavaObject>("getSystemService", "location"))
+        using(var locationObj = locationManager.Call<AndroidJavaObject>("getLastKnownLocation", "gps"))
         {
-            var result = _hardwareService.Call<float[]>("getDeviceTemperatures", new[]{0, 0});
-            _output.AppendLine("*Current CPU temperature*");
-            foreach (var item in result)
+            if (locationObj != null)
             {
-                _output.AppendLine(item.ToString(CultureInfo.InvariantCulture));
+                double latitude = locationObj.Call<double>("getLatitude");
+                double longitude = locationObj.Call<double>("getLongitude");
+                var isMock = locationObj.Call<bool>("isFromMockProvider");
+                _output.AppendLine($"{latitude} {longitude} {isMock}");
             }
-
-        }
-        else
-        {
-            _output.AppendLine("Hardware Service is not available");
         }
         
-        // sb.AppendLine("Command line: " + CallMethod());
-        
-        #else
+#else
         _output.AppendLine("Not Android");
-        #endif
+#endif
     }
 
     private void Start()
     {
         _adaptivePerformance = Holder.Instance;
-        
-#if !UNITY_EDITOR && UNITY_ANDROID
-        _activity = new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity");
-        if (_activity == null)
-        {
-            Debug.Log("Activity null");
-            return;
-        }
-        _context = _activity.Call<AndroidJavaObject>("getApplicationContext");
-        if (_context == null)
-        {
-            Debug.Log("Context null");
-        }
-        // this doesn't work
-        // looks like services are not available via getSystemService from C# code
-        _memoryService = _context.Call<AndroidJavaObject>("getSystemService", "memory");
-        if (_memoryService == null)
-        {
-            Debug.Log("_memoryService null");
-        }
-        _memoryInfo = new AndroidJavaObject("android.app.ActivityManager$MemoryInfo");
-        if (_memoryInfo == null)
-        {
-            Debug.Log("_memoryInfo null");
-        }
-
-        _hardwareService = _context.Call<AndroidJavaObject>("getSystemService", "hardware_properties");
-#endif
     }
 
     private string CallMethod()
